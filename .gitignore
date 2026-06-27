@@ -1,9 +1,0 @@
-.gradle/
-build/
-*.class
-
-# Generated release artifacts. The resource-pack source folder is tracked.
-dist/*.zip
-
-# Agent/session transcripts and temporary notes should not become source.
-*-lets-create-a-new-minecraft-*.txt

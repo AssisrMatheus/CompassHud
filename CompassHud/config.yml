@@ -1,0 +1,69 @@
+# ============================================================================
+#  CompassHud  -  server-side directional compass HUD (no client mod needed)
+# ============================================================================
+#
+#  Renders a Skyrim / battle-royale style horizontal compass strip such as:
+#
+#      [   240    W    300    N    60    E    120   ]
+#                       ^
+#
+#  The strip scrolls under a fixed center pointer as the player looks around.
+#  Everything below can be tuned without touching code; use /compass reload.
+
+# Where to draw the strip.
+#   BOSS_BAR   - top of the screen (also shows a thin vanilla bar underneath).
+#   ACTION_BAR - just above the hotbar / health (text only, no bar graphic).
+display: BOSS_BAR
+
+# Width of the strip in characters. Minecraft's font is not monospaced and the
+# server cannot read a client's resolution, so this is an approximation of
+# "1/3 of the screen". ~33 is a good starting point at GUI scale Auto.
+# The strip is centered automatically by the client.
+width: 33
+
+# How many degrees of arc are shown across the full width.
+# Smaller = more "zoomed in" (directions move faster). 180 shows a half-circle.
+field-of-view: 180
+
+# Degrees between numeric marks. Examples: 30, 45, 50, 90.
+# Marks that land on a cardinal show the letter (N/E/S/W) instead of the number.
+mark-interval: 30
+
+# Show the degree numbers (turn off for a letters-only compass).
+show-degrees: true
+
+# Show intercardinal letters NE / SE / SW / NW (they replace numbers there).
+show-intercardinals: false
+
+# How often (in server ticks, 20 = 1 second) the strip is refreshed.
+# 1 = smoothest. BOSS_BAR only sends a packet when the visible text changes,
+# so 1 is cheap. ACTION_BAR resends every interval (raise to 1-2 to be safe).
+update-interval-ticks: 1
+
+# Should players see the compass automatically when they join?
+# They can always toggle it with /compass. (Toggle state is per-session.)
+default-enabled: true
+
+# Characters used to draw the strip. Single characters only (except brackets,
+# which may be empty "" to disable). Stick to glyphs in the default MC font.
+characters:
+  filler: '-'         # drawn between marks
+  pointer: '^'        # fixed indicator at the exact center
+  left-bracket: '['
+  right-bracket: ']'
+
+# Colors. Accepts Minecraft color names (e.g. AQUA, GOLD, DARK_GRAY) or a
+# hex string like '#55ffff'.
+colors:
+  filler: DARK_GRAY
+  number: WHITE
+  cardinal: AQUA
+  intercardinal: GRAY
+  pointer: GOLD
+  bracket: DARK_GRAY
+
+# BOSS_BAR appearance (ignored for ACTION_BAR).
+bossbar:
+  color: WHITE          # PINK, BLUE, RED, GREEN, YELLOW, PURPLE, WHITE
+  overlay: PROGRESS     # PROGRESS, NOTCHED_6, NOTCHED_10, NOTCHED_12, NOTCHED_20
+  progress: 0.0         # 0.0 - 1.0 (length of the filled bar)
