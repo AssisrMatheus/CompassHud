@@ -9,6 +9,23 @@ base {
     archivesName = project.archives_base_name
 }
 
+def runtimeResourcePackName = "CompassHud-resource-pack.zip"
+def resourcePackBaseName = "CompassHud-resource-pack"
+def nestedVanillaPingsJarName = "vanillapings-patched.jar"
+def vanillaPingsVersion = providers.provider {
+    def props = new Properties()
+    layout.projectDirectory.file('vendor/VanillaPings/stonecutter.properties.toml').asFile.withInputStream {
+        props.load(new StringReader(it.text.replaceAll(/(?m)^([A-Za-z0-9_.-]+)\s*=\s*"(.*)"\s*$/, '$1=$2')))
+    }
+    props.getProperty('mod.version')
+}
+def vanillaPingsJar = providers.provider {
+    fileTree(layout.projectDirectory.dir("vendor/VanillaPings/build/libs")).matching {
+        include "vanillapings-${project.minecraft_version}-v${vanillaPingsVersion.get()}.jar"
+        exclude "*-sources.jar"
+    }.singleFile
+}
+
 repositories {
     maven {
         name = 'Fabric'
@@ -22,6 +39,22 @@ dependencies {
     compileOnly fileTree(dir: '../libraries', include: '**/*.jar')
     compileOnly "net.fabricmc:fabric-loader:${project.loader_version}"
     compileOnly fileTree(dir: '../.fabric/processedMods', include: '*.jar')
+    compileOnly files({ vanillaPingsJar.get() })
+}
+
+tasks.register('buildVanillaPings', Exec) {
+    workingDir = layout.projectDirectory.dir('vendor/VanillaPings').asFile
+    commandLine './gradlew', ":${project.minecraft_version}:buildAndCollect",
+            '-Dorg.gradle.java.home=/home/assisr/.local/share/jdks/current-25'
+    doFirst {
+        delete fileTree(layout.projectDirectory.dir('vendor/VanillaPings/build/libs')) {
+            include "vanillapings-${project.minecraft_version}-v*.jar"
+        }
+    }
+}
+
+tasks.named('compileJava') {
+    dependsOn tasks.named('buildVanillaPings')
 }
 
 processResources {
@@ -31,8 +64,90 @@ processResources {
     }
 }
 
+tasks.named('jar') {
+    dependsOn tasks.named('buildVanillaPings')
+    from({ vanillaPingsJar.get() }) {
+        into 'META-INF/jars'
+        rename { nestedVanillaPingsJarName }
+    }
+}
+
+tasks.register('resourcePackZip', Zip) {
+    group = 'build'
+    description = 'Build the CompassHud resource-pack zip for the current mod version.'
+    archiveBaseName = resourcePackBaseName
+    archiveVersion = project.version
+    archiveExtension = 'zip'
+    destinationDirectory = layout.projectDirectory.dir('dist')
+    from(layout.projectDirectory.dir('resource-pack'))
+    preserveFileTimestamps = false
+    reproducibleFileOrder = true
+}
+
+tasks.register('resourcePackSha1') {
+    group = 'build'
+    description = 'Write the SHA1 checksum for the generated resource-pack zip.'
+    dependsOn tasks.named('resourcePackZip')
+    def zipTask = tasks.named('resourcePackZip')
+    def shaFile = layout.projectDirectory.file("dist/${resourcePackBaseName}-${project.version}.zip.sha1")
+    outputs.file shaFile
+    doLast {
+        File zipFile = zipTask.get().archiveFile.get().asFile
+        shaFile.asFile.text = "${sha1(zipFile)}  ${zipFile.name}\n"
+    }
+}
+
+tasks.named('build') {
+    dependsOn tasks.named('resourcePackSha1')
+}
+
+tasks.register('deployLocal') {
+    group = 'distribution'
+    description = 'Build and deploy CompassHud plus its resource pack to the adjacent local server.'
+    dependsOn tasks.named('build')
+    doLast {
+        File modsDir = layout.projectDirectory.dir('../mods').asFile
+        File resourcepacksDir = layout.projectDirectory.dir('../resourcepacks').asFile
+        modsDir.mkdirs()
+        resourcepacksDir.mkdirs()
+
+        modsDir.listFiles((dir, name) -> name ==~ /CompassHud-.*\.jar/)?.each { it.delete() }
+        copy {
+            from tasks.named('jar').get().archiveFile
+            into modsDir
+        }
+
+        File generatedPack = tasks.named('resourcePackZip').get().archiveFile.get().asFile
+        copy {
+            from generatedPack
+            into resourcepacksDir
+            rename { runtimeResourcePackName }
+        }
+        resourcepacksDir.listFiles((dir, name) -> name ==~ /CompassHud-resource-pack-.*\.zip/)?.each { it.delete() }
+
+        File configEnv = layout.projectDirectory.file('../config.env').asFile
+        File serverProperties = layout.projectDirectory.file('../server.properties').asFile
+        Map env = readSimpleEnv(configEnv)
+        String host = env.RESOURCE_PACK_PUBLIC_HOST ?: env.RESOURCE_PACK_BIND_IP ?: 'localhost'
+        String port = env.RESOURCE_PACK_PORT ?: '8000'
+        String packId = env.RESOURCE_PACK_ID ?: ''
+        String packUrl = "http://${host}:${port}/${runtimeResourcePackName}"
+        String packSha1 = sha1(new File(resourcepacksDir, runtimeResourcePackName))
+
+        updateEnvFile(configEnv, ['RESOURCE_PACK_FILE': runtimeResourcePackName])
+        updatePropertiesFile(serverProperties, [
+                'resource-pack'       : packUrl.replace(':', '\\:'),
+                'resource-pack-sha1'  : packSha1,
+                'resource-pack-id'    : packId,
+                'require-resource-pack': 'false'
+        ])
+        logger.lifecycle("Deployed ${tasks.named('jar').get().archiveFile.get().asFile.name}")
+        logger.lifecycle("Deployed ${runtimeResourcePackName} (${packSha1})")
+    }
+}
+
 tasks.withType(JavaCompile).configureEach {
-    // MC 26.2 runs on Java 25.
+    // The configured Minecraft target runs on Java 25.
     it.options.encoding = 'UTF-8'
     it.options.release = 25
 }
@@ -44,4 +159,66 @@ java {
     toolchain {
         languageVersion = JavaLanguageVersion.of(25)
     }
+}
+
+static String sha1(File file) {
+    def digest = java.security.MessageDigest.getInstance('SHA-1')
+    file.withInputStream { input ->
+        byte[] buffer = new byte[8192]
+        int read
+        while ((read = input.read(buffer)) != -1) {
+            digest.update(buffer, 0, read)
+        }
+    }
+    return digest.digest().collect { String.format('%02x', it) }.join()
+}
+
+static Map<String, String> readSimpleEnv(File file) {
+    Map<String, String> out = [:]
+    if (!file.isFile()) return out
+    file.eachLine { line ->
+        String trimmed = line.trim()
+        if (!trimmed || trimmed.startsWith('#') || !trimmed.contains('=')) return
+        int split = trimmed.indexOf('=')
+        String key = trimmed.substring(0, split)
+        String value = trimmed.substring(split + 1).trim()
+        if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
+            value = value.substring(1, value.length() - 1)
+        }
+        out[key] = value
+    }
+    return out
+}
+
+static void updateEnvFile(File file, Map<String, String> updates) {
+    List<String> lines = file.isFile() ? file.readLines('UTF-8') : []
+    Set<String> seen = []
+    lines = lines.collect { line ->
+        String trimmed = line.trim()
+        if (!trimmed || trimmed.startsWith('#') || !trimmed.contains('=')) return line
+        String key = trimmed.substring(0, trimmed.indexOf('='))
+        if (!updates.containsKey(key)) return line
+        seen.add(key)
+        return "${key}=\"${updates[key]}\""
+    }
+    updates.each { key, value ->
+        if (!seen.contains(key)) lines.add("${key}=\"${value}\"")
+    }
+    file.text = lines.join('\n') + '\n'
+}
+
+static void updatePropertiesFile(File file, Map<String, String> updates) {
+    List<String> lines = file.isFile() ? file.readLines('UTF-8') : []
+    Set<String> seen = []
+    lines = lines.collect { line ->
+        if (line.startsWith('#') || !line.contains('=')) return line
+        String key = line.substring(0, line.indexOf('='))
+        if (!updates.containsKey(key)) return line
+        seen.add(key)
+        return "${key}=${updates[key]}"
+    }
+    updates.each { key, value ->
+        if (!seen.contains(key)) lines.add("${key}=${value}")
+    }
+    file.text = lines.join('\n') + '\n'
 }

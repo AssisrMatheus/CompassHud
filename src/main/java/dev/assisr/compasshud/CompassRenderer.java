@@ -6,6 +6,7 @@ import net.minecraft.network.chat.Style;
 import net.minecraft.network.chat.TextColor;
 
 import java.util.Arrays;
+import java.util.List;
 import java.util.Objects;
 
 /**
@@ -46,16 +47,22 @@ public final class CompassRenderer {
     }
 
     public Rendered render(float yaw) {
+        return render(yaw, List.of());
+    }
+
+    public Rendered render(float yaw, List<CompassMarker> markers) {
         double bearing = yawToBearing(yaw);
         int width = cfg.width;
         int center = width / 2;
         double degPerChar = cfg.fieldOfView / width;
         double halfFov = cfg.fieldOfView / 2.0;
 
-        char[] buf = new char[width];
+        String[] buf = new String[width];
         Arrays.fill(buf, cfg.filler);
         TextColor[] col = new TextColor[width];
         Arrays.fill(col, cfg.fillerColor);
+        boolean[] font = new boolean[width];
+        Arrays.fill(font, cfg.resourcePackMode);
 
         // Include a little slack so a long label whose center is just off-screen
         // still paints the part of itself that is on-screen.
@@ -66,13 +73,37 @@ public final class CompassRenderer {
             if (Math.abs(delta) > halfFov + slack) continue;
 
             int colCenter = (int) Math.round(center + delta / degPerChar);
-            String label = mark.label();
-            int start = colCenter - label.length() / 2;
-            for (int i = 0; i < label.length(); i++) {
+            String[] label = cells(mark.label());
+            int start = colCenter - label.length / 2;
+            for (int i = 0; i < label.length; i++) {
                 int idx = start + i;
                 if (idx < 0 || idx >= width) continue;
-                buf[idx] = label.charAt(i);
+                buf[idx] = label[i];
                 col[idx] = mark.color();
+                font[idx] = cfg.resourcePackMode;
+            }
+        }
+
+        for (CompassMarker marker : markers) {
+            double delta = angleDelta(marker.bearing(), bearing);
+            boolean outside = Math.abs(delta) > halfFov;
+            if (outside && !marker.clampToEdge()) {
+                continue;
+            }
+
+            int colCenter = (int) Math.round(center + delta / degPerChar);
+            if (outside) {
+                colCenter = delta < 0 ? 0 : width - 1;
+            }
+
+            String[] label = cells(marker.label().isEmpty() ? marker.glyph() : marker.label());
+            int start = colCenter - label.length / 2;
+            for (int i = 0; i < label.length; i++) {
+                int idx = start + i;
+                if (idx < 0 || idx >= width) continue;
+                buf[idx] = label[i];
+                col[idx] = marker.color();
+                font[idx] = marker.resourcePackFont();
             }
         }
 
@@ -81,36 +112,52 @@ public final class CompassRenderer {
             // draw the pointer glyph when nothing else is there. This keeps a
             // centered label (e.g. "N" when facing due north) visible instead of
             // being hidden under the pointer.
-            if (buf[center] == cfg.filler) {
+            if (buf[center].equals(cfg.filler)) {
                 buf[center] = cfg.pointer;
             }
             col[center] = cfg.pointerColor;
+            font[center] = cfg.resourcePackMode;
         }
 
-        return new Rendered(assemble(buf, col), new String(buf));
+        return new Rendered(assemble(buf, col, font), String.join("", buf));
     }
 
     /** Collapse the per-character buffer into runs of equal color. */
-    private Component assemble(char[] buf, TextColor[] col) {
+    private Component assemble(String[] buf, TextColor[] col, boolean[] font) {
         MutableComponent out = Component.empty();
         if (!cfg.leftBracket.isEmpty()) {
-            out.append(Component.literal(cfg.leftBracket).setStyle(Style.EMPTY.withColor(cfg.bracketColor)));
+            out.append(Component.literal(cfg.leftBracket).setStyle(style(cfg.bracketColor, cfg.resourcePackMode)));
         }
         int i = 0;
         while (i < buf.length) {
             TextColor runColor = col[i];
+            boolean runFont = font[i];
             int j = i;
             StringBuilder run = new StringBuilder();
-            while (j < buf.length && Objects.equals(col[j], runColor)) {
+            while (j < buf.length && Objects.equals(col[j], runColor) && font[j] == runFont) {
                 run.append(buf[j]);
                 j++;
             }
-            out.append(Component.literal(run.toString()).setStyle(Style.EMPTY.withColor(runColor)));
+            out.append(Component.literal(run.toString()).setStyle(style(runColor, runFont)));
             i = j;
         }
         if (!cfg.rightBracket.isEmpty()) {
-            out.append(Component.literal(cfg.rightBracket).setStyle(Style.EMPTY.withColor(cfg.bracketColor)));
+            out.append(Component.literal(cfg.rightBracket).setStyle(style(cfg.bracketColor, cfg.resourcePackMode)));
         }
         return out;
+    }
+
+    private Style style(TextColor color, boolean resourcePackFont) {
+        Style style = Style.EMPTY.withColor(color);
+        return resourcePackFont ? style.withFont(cfg.resourcePackFont) : style;
+    }
+
+    private static String[] cells(String value) {
+        if (value.isEmpty()) {
+            return new String[0];
+        }
+        return value.codePoints()
+                .mapToObj(Character::toString)
+                .toArray(String[]::new);
     }
 }

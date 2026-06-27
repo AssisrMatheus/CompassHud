@@ -1,5 +1,6 @@
 package dev.assisr.compasshud;
 
+import dev.assisr.compasshud.integration.vanillapings.VanillaPingsIntegration;
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
@@ -31,10 +32,14 @@ public final class CompassHud implements ModInitializer {
         this.manager = new CompassManager(config);
 
         ServerTickEvents.END_SERVER_TICK.register(manager::tick);
+        ServerPlayConnectionEvents.JOIN.register((handler, sender, server) -> manager.handleJoin(handler.player));
         ServerPlayConnectionEvents.DISCONNECT.register((handler, server) -> manager.handleQuit(handler.player));
-        ServerLifecycleEvents.SERVER_STOPPING.register(server -> manager.shutdown());
+        ServerLifecycleEvents.SERVER_STOPPING.register(manager::shutdown);
         CommandRegistrationCallback.EVENT.register((dispatcher, registryAccess, environment) ->
                 CompassCommand.register(dispatcher, this));
+        if (FabricLoader.getInstance().isModLoaded("vanillapings")) {
+            VanillaPingsIntegration.register(manager);
+        }
 
         LOGGER.info("[CompassHud] Initialized (display={}).", config.display);
     }

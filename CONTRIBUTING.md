@@ -38,11 +38,11 @@ If Gradle cannot find Java, run the build explicitly:
 
 ## Mapping Strategy
 
-This project intentionally does not use Fabric Loom right now. Minecraft 26.2
-has a named server jar available at:
+This project intentionally does not use Fabric Loom right now. The configured
+Minecraft target has a named server jar available at:
 
 ```text
-../versions/26.2/server-26.2.jar
+../versions/${minecraft_version}/server-${minecraft_version}.jar
 ```
 
 The build compiles directly against that jar plus the server libraries, Fabric
@@ -68,17 +68,42 @@ Build:
 Main artifact:
 
 ```text
-build/libs/CompassHud-2.1.0.jar
+build/libs/CompassHud-${mod_version}.jar
 ```
 
 Deploy to the local Fabric server:
 
 ```bash
-cp build/libs/CompassHud-2.1.0.jar ../mods/
+./gradlew deployLocal
 ```
 
-Remove older CompassHud jars from `../mods` before restarting so Fabric does not
-load duplicate mod IDs.
+The deploy task removes older CompassHud jars from `../mods`, copies the current
+jar, builds and copies the resource pack, and updates `../server.properties`
+with the correct resource-pack URL and SHA1.
+
+## Versioning
+
+CompassHud's release version has one source of truth:
+
+```text
+gradle.properties -> mod_version
+```
+
+Do not hardcode release numbers in documentation, resource-pack filenames, or
+deployment commands. Use Gradle tasks and `${mod_version}` examples instead.
+`processResources` expands the manifest version, `resourcePackZip` names the
+distributable resource pack from `project.version`, and `deployLocal` updates
+the local server files and resource-pack SHA.
+
+When the vendored VanillaPings patch changes behavior, also bump:
+
+```text
+vendor/VanillaPings/stonecutter.properties.toml -> mod.version
+```
+
+CompassHud's build reads that value and nests the matching patched VanillaPings
+jar as `META-INF/jars/vanillapings-patched.jar`, so stale collected
+VanillaPings jars should not be selected after a patch-version bump.
 
 ## Resource Pack
 
@@ -91,14 +116,20 @@ resource-pack
 The distributable zip lives in:
 
 ```text
-dist/CompassHud-resource-pack-2.1.0.zip
+dist/CompassHud-resource-pack-${mod_version}.zip
 ```
 
-When the resource pack changes:
+The runtime copy served by the local resource-pack host is:
 
-1. Rebuild the zip from the contents of `resource-pack`.
-2. Update the SHA1 in `../server.properties`.
-3. Keep `config/compasshud.json` glyph settings in sync with
+```text
+../resourcepacks/CompassHud-resource-pack.zip
+```
+
+`./gradlew build` creates the versioned distributable zip and its `.sha1` file.
+`./gradlew deployLocal` copies the runtime zip and updates the SHA1 in
+`../server.properties`.
+
+When resource-pack glyphs change, keep `config/compasshud.json` glyph settings in sync with
    `resource-pack/assets/compasshud/font/compass.json`.
 
 Vanilla Minecraft resource packs are downloaded by the client from the URL in
@@ -130,7 +161,7 @@ RESOURCE_PACK_HOST_ENABLED="1"
 RESOURCE_PACK_BIND_IP="192.168.18.100"
 RESOURCE_PACK_PUBLIC_HOST="mine.assisr.com"
 RESOURCE_PACK_PORT="8000"
-RESOURCE_PACK_FILE="CompassHud-resource-pack-2.1.0.zip"
+RESOURCE_PACK_FILE="CompassHud-resource-pack.zip"
 RESOURCE_PACK_ID="4b06a502-d777-4a99-bc2e-6e06c6e4c58e"
 RESOURCE_PACK_COMPOSE_PROJECT="compasshud-resource-pack"
 ```
@@ -144,7 +175,7 @@ The container binds to the server's LAN IP only:
 The URL advertised to Minecraft clients is public:
 
 ```text
-http://mine.assisr.com:8000/CompassHud-resource-pack-2.1.0.zip
+http://mine.assisr.com:8000/CompassHud-resource-pack.zip
 ```
 
 Remote players do not fetch this through the Minecraft protocol on port 25565.
@@ -164,7 +195,7 @@ sudo ufw allow 8000/tcp comment 'CompassHud resource pack'
 External test, preferably from outside the LAN:
 
 ```bash
-curl -I http://mine.assisr.com:8000/CompassHud-resource-pack-2.1.0.zip
+curl -I http://mine.assisr.com:8000/CompassHud-resource-pack.zip
 ```
 
 ### Resource-Pack HTTP Security
@@ -184,12 +215,12 @@ resource-pack container is intentionally restricted:
 Expected verification:
 
 ```text
-/CompassHud-resource-pack-2.1.0.zip              200
+/CompassHud-resource-pack.zip                  200
 /                                                404
 /server.properties                               404
 /config.env                                      404
 /../server.properties                            404
-/CompassHud-resource-pack-2.1.0.zip/anything     404
+/CompassHud-resource-pack.zip/anything         404
 ```
 
 Useful checks:
@@ -198,7 +229,7 @@ Useful checks:
 docker ps --filter name=compasshud-resource-pack
 docker inspect compasshud-resource-pack --format '{{json .NetworkSettings.Ports}}'
 curl -s -o /dev/null -w '%{http_code}\n' \
-  http://192.168.18.100:8000/CompassHud-resource-pack-2.1.0.zip
+  http://192.168.18.100:8000/CompassHud-resource-pack.zip
 ```
 
 ## Runtime Config

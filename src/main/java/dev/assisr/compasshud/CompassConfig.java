@@ -32,6 +32,8 @@ public final class CompassConfig {
 
     public enum DisplayMode { BOSS_BAR, ACTION_BAR }
 
+    public enum MissingEntityBehavior { FREEZE, EXPIRE }
+
     /** A single labelled point on the compass ring (cardinal, intercardinal, or number). */
     public record Mark(int bearing, String label, TextColor color) {}
 
@@ -43,12 +45,12 @@ public final class CompassConfig {
     public final boolean resourcePackMode;
     public final FontDescription.Resource resourcePackFont;
 
-    public final char filler;
-    public final char minorTick;
-    public final char majorTick;
-    public final char pointer;
-    public final char spawnMarker;
-    public final char deathMarker;
+    public final String filler;
+    public final String minorTick;
+    public final String majorTick;
+    public final String pointer;
+    public final String spawnMarker;
+    public final String deathMarker;
     public final boolean hasPointer;
     public final String leftBracket;
     public final String rightBracket;
@@ -63,6 +65,20 @@ public final class CompassConfig {
     public final boolean showLastDeath;
     public final boolean markerSameDimensionOnly;
     public final boolean markerClampToEdge;
+
+    public final boolean pingsEnabled;
+    public final String[] pingGlyphs;
+    public final TextColor pingColor;
+    public final boolean pingSameDimensionOnly;
+    public final boolean pingClampToEdge;
+    public final MissingEntityBehavior pingMissingEntityBehavior;
+
+    public final String[] savedSpotGlyphs;
+    public final TextColor[] savedSpotColors;
+    public final int savedSpotMaxCount;
+    public final boolean savedSpotResourcePackMode;
+    public final boolean savedSpotSameDimensionOnly;
+    public final boolean savedSpotClampToEdge;
 
     public final BossEvent.BossBarColor bossBarColor;
     public final BossEvent.BossBarOverlay bossBarOverlay;
@@ -81,13 +97,13 @@ public final class CompassConfig {
         this.resourcePackFont = new FontDescription.Resource(Identifier.parse(orDefault(raw.resourcePackFont, "compasshud:compass")));
 
         Raw.Chars chars = raw.characters != null ? raw.characters : new Raw.Chars();
-        this.filler = firstChar(chars.filler, '-');
-        this.minorTick = firstChar(chars.minorTick, '|');
-        this.majorTick = firstChar(chars.majorTick, '|');
+        this.filler = firstGlyph(chars.filler, "-");
+        this.minorTick = firstGlyph(chars.minorTick, "|");
+        this.majorTick = firstGlyph(chars.majorTick, "|");
         this.hasPointer = chars.pointer != null && !chars.pointer.isEmpty();
-        this.pointer = firstChar(chars.pointer, '^');
-        this.spawnMarker = firstChar(chars.spawnMarker, '✦');
-        this.deathMarker = firstChar(chars.deathMarker, '✕');
+        this.pointer = firstGlyph(chars.pointer, "^");
+        this.spawnMarker = firstGlyph(chars.spawnMarker, "✦");
+        this.deathMarker = firstGlyph(chars.deathMarker, "✕");
         this.leftBracket = orEmpty(chars.leftBracket);
         this.rightBracket = orEmpty(chars.rightBracket);
 
@@ -106,6 +122,28 @@ public final class CompassConfig {
         this.showLastDeath = markers.lastDeath;
         this.markerSameDimensionOnly = markers.sameDimensionOnly;
         this.markerClampToEdge = markers.clampToEdge;
+
+        Raw.Pings pings = raw.pings != null ? raw.pings : new Raw.Pings();
+        this.pingsEnabled = pings.enabled;
+        this.pingGlyphs = glyphsOrDefault(pings.glyphs, "✱✸⬟✹");
+        this.pingColor = color(pings.color, TextColor.fromRgb(0xFFAA00), log);
+        this.pingSameDimensionOnly = pings.sameDimensionOnly;
+        this.pingClampToEdge = pings.clampToEdge;
+        this.pingMissingEntityBehavior = enumOf(MissingEntityBehavior.class, pings.missingEntityBehavior,
+                MissingEntityBehavior.FREEZE, log, "pings.missingEntityBehavior");
+
+        Raw.SavedSpots savedSpots = raw.savedSpots != null ? raw.savedSpots : new Raw.SavedSpots();
+        this.savedSpotGlyphs = glyphsOrDefault(savedSpots.glyphs, "⏾■▲◆◉●🞛🞿🟊🟋🟎🟐✪⬟⬣✤");
+        this.savedSpotColors = colors(savedSpots.colors, new int[]{
+                0x8FB9A8, 0xB8A47E, 0x9AA7C7, 0xB58A8A,
+                0x8DB6BD, 0xA79BBE, 0xA6AE7D, 0xB09675
+        }, log);
+        this.savedSpotMaxCount = savedSpots.maxCount > 0
+                ? Math.min(savedSpots.maxCount, this.savedSpotGlyphs.length)
+                : this.savedSpotGlyphs.length;
+        this.savedSpotResourcePackMode = savedSpots.resourcePackMode;
+        this.savedSpotSameDimensionOnly = savedSpots.sameDimensionOnly;
+        this.savedSpotClampToEdge = savedSpots.clampToEdge;
 
         Raw.Boss boss = raw.bossbar != null ? raw.bossbar : new Raw.Boss();
         this.bossBarColor = enumOf(BossEvent.BossBarColor.class, boss.color, BossEvent.BossBarColor.WHITE, log, "bossbar.color");
@@ -164,6 +202,8 @@ public final class CompassConfig {
         Chars characters = new Chars();
         Colors colors = new Colors();
         Markers markers = new Markers();
+        Pings pings = new Pings();
+        SavedSpots savedSpots = new SavedSpots();
         Boss bossbar = new Boss();
 
         static final class Chars {
@@ -191,6 +231,27 @@ public final class CompassConfig {
         static final class Markers {
             boolean worldSpawn = true;
             boolean lastDeath = true;
+            boolean sameDimensionOnly = true;
+            boolean clampToEdge = true;
+        }
+
+        static final class Pings {
+            boolean enabled = true;
+            String glyphs = "✱✸⬟✹";
+            String color = "GOLD";
+            boolean sameDimensionOnly = true;
+            boolean clampToEdge = true;
+            String missingEntityBehavior = "FREEZE";
+        }
+
+        static final class SavedSpots {
+            String glyphs = "⏾■▲◆◉●🞛🞿🟊🟋🟎🟐✪⬟⬣✤";
+            List<String> colors = List.of(
+                    "#8FB9A8", "#B8A47E", "#9AA7C7", "#B58A8A",
+                    "#8DB6BD", "#A79BBE", "#A6AE7D", "#B09675"
+            );
+            int maxCount = 0;
+            boolean resourcePackMode = false;
             boolean sameDimensionOnly = true;
             boolean clampToEdge = true;
         }
@@ -234,8 +295,18 @@ public final class CompassConfig {
         return Math.max(min, Math.min(max, v));
     }
 
-    private static char firstChar(String s, char fallback) {
-        return (s == null || s.isEmpty()) ? fallback : s.charAt(0);
+    private static String firstGlyph(String s, String fallback) {
+        if (s == null || s.isEmpty()) return fallback;
+        int codePoint = s.codePointAt(0);
+        return Character.toString(codePoint);
+    }
+
+    private static String[] glyphsOrDefault(String s, String fallback) {
+        String value = (s == null || s.isBlank()) ? fallback : s;
+        String[] out = value.codePoints()
+                .mapToObj(Character::toString)
+                .toArray(String[]::new);
+        return out.length == 0 ? glyphsOrDefault(fallback, fallback) : out;
     }
 
     private static String orEmpty(String s) {
@@ -266,6 +337,22 @@ public final class CompassConfig {
         }
         log.warn("[CompassHud] Unknown color '{}', using fallback.", raw);
         return fallback;
+    }
+
+    private static TextColor[] colors(List<String> raw, int[] fallbackRgb, Logger log) {
+        List<String> source = raw == null || raw.isEmpty() ? List.of() : raw;
+        if (source.isEmpty()) {
+            TextColor[] out = new TextColor[fallbackRgb.length];
+            for (int i = 0; i < fallbackRgb.length; i++) {
+                out[i] = TextColor.fromRgb(fallbackRgb[i]);
+            }
+            return out;
+        }
+        TextColor[] out = new TextColor[source.size()];
+        for (int i = 0; i < source.size(); i++) {
+            out[i] = color(source.get(i), TextColor.fromRgb(fallbackRgb[i % fallbackRgb.length]), log);
+        }
+        return out;
     }
 
     private static final Map<ChatFormatting, Integer> COLOR_RGB = Map.ofEntries(
@@ -330,6 +417,17 @@ public final class CompassConfig {
                 "markers.lastDeath: show an icon pointing toward the player's last death location.",
                 "markers.sameDimensionOnly: hide markers from other dimensions.",
                 "markers.clampToEdge: keep off-screen markers pinned to the compass edge.",
+                "pings.enabled: mirror accepted VanillaPings pings onto the compass.",
+                "pings.glyphs: single-character glyph pool for concurrent ping markers.",
+                "pings.sameDimensionOnly: hide VanillaPings compass markers from other dimensions.",
+                "pings.clampToEdge: keep off-screen VanillaPings compass markers pinned to the compass edge.",
+                "pings.missingEntityBehavior: FREEZE at last known position or EXPIRE when an entity ping target disappears.",
+                "savedSpots.glyphs: one-glyph marker pool for /compass save entries; pool length is the default per-player per-dimension capacity.",
+                "savedSpots.colors: muted color palette assigned when a saved spot is created and then persisted.",
+                "savedSpots.maxCount: 0 means use the glyph pool length per dimension; positive values are capped by the glyph pool length.",
+                "savedSpots.resourcePackMode: use the CompassHud font for saved spot glyphs; false uses vanilla/default glyph fallback.",
+                "savedSpots.sameDimensionOnly: hide saved spots from dimensions other than the player's current dimension.",
+                "savedSpots.clampToEdge: keep off-screen saved spots pinned to the compass edge.",
                 "colors: a Minecraft color name (WHITE, AQUA, GOLD, DARK_GRAY, ...) or a hex string like \\"#55ffff\\".",
                 "bossbar.color: PINK, BLUE, RED, GREEN, YELLOW, PURPLE, WHITE.",
                 "The provided resource pack hides WHITE boss-bar textures; use WHITE for the CompassHud boss bar.",
@@ -373,6 +471,33 @@ public final class CompassConfig {
               "markers": {
                 "worldSpawn": true,
                 "lastDeath": true,
+                "sameDimensionOnly": true,
+                "clampToEdge": true
+              },
+
+              "pings": {
+                "enabled": true,
+                "glyphs": "✱✸⬟✹",
+                "color": "GOLD",
+                "sameDimensionOnly": true,
+                "clampToEdge": true,
+                "missingEntityBehavior": "FREEZE"
+              },
+
+              "savedSpots": {
+                "glyphs": "⏾■▲◆◉●🞛🞿🟊🟋🟎🟐✪⬟⬣✤",
+                "colors": [
+                  "#8FB9A8",
+                  "#B8A47E",
+                  "#9AA7C7",
+                  "#B58A8A",
+                  "#8DB6BD",
+                  "#A79BBE",
+                  "#A6AE7D",
+                  "#B09675"
+                ],
+                "maxCount": 0,
+                "resourcePackMode": false,
                 "sameDimensionOnly": true,
                 "clampToEdge": true
               },
