@@ -1,0 +1,48 @@
+# Gradle and Java build output
+.gradle/
+build/
+out/
+classes/
+
+# IDE and editor state
+.idea/
+*.iml
+*.ipr
+*.iws
+.settings/
+.vscode/
+bin/
+.classpath
+.project
+
+# Runtime/local server state
+/run/
+/logs/
+/crash-reports/
+/config/
+/config.env
+/server.properties
+/world/
+/world_nether/
+/world_the_end/
+/mods/
+/resourcepacks/
+/libraries/
+/versions/
+/.fabric/
+
+# Generated archives, except checked-in distribution artifacts
+*.class
+*.hprof
+*.jfr
+hs_err_*.log
+replay_*.log
+
+# Vendored VanillaPings generated output
+vendor/VanillaPings/.gradle/
+vendor/VanillaPings/build/
+vendor/VanillaPings/versions/
+
+# OS metadata
+.DS_Store
+Thumbs.db

@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "id": "vanillapings",
+  "version": "${version}",
+  "name": "Vanilla Pings",
+  "description": "Adds customizable pinging of locations and entities to nearby players in a vanilla way (using armor stands and glowing).",
+  "authors": ["CrossyL"],
+  "contact": {
+    "homepage": "https://github.com/crossy-l/VanillaPings",
+    "sources": "https://github.com/crossy-l/VanillaPings",
+    "issues": "https://github.com/crossy-l/VanillaPings/issues"
+  },
+  "license": "MIT License",
+  "icon": "assets/vanillapings/icon.png",
+  "environment": "*",
+  "entrypoints": {
+    "main": ["com.vanillapings.VanillaPings"],
+    "client": ["com.vanillapings.VanillaPingsClient"]
+  },
+  "mixins": ["vanillapings.mixins.json"],
+  "depends": {
+    "fabricloader": ">=0.15.0",
+    "fabric-api": "*",
+    "minecraft": "${minecraft}",
+    "java": ">=${java}"
+  }
+}
