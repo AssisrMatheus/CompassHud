@@ -185,10 +185,10 @@ public final class CompassManager {
 
         if (cfg.showWorldSpawn && worldSpawn != null) {
             addMarker(state.markers, player, worldSpawn,
-                    "spawn", cfg.spawnColor, cfg.spawnMarker);
+                    "", cfg.spawnColor, cfg.spawnMarker);
         }
         if (cfg.showLastDeath && state.lastDeath != null) {
-            addMarker(state.markers, player, state.lastDeath, "death", cfg.deathColor, cfg.deathMarker);
+            addMarker(state.markers, player, state.lastDeath, "", cfg.deathColor, cfg.deathMarker);
         }
         return state.markers;
     }

@@ -106,6 +106,101 @@ Vanilla Minecraft resource packs are downloaded by the client from the URL in
 game connection. If the HTTP host is local-only, clients must still be able to
 reach that local URL directly.
 
+### Local Docker Host
+
+Do not modify `/home/assisr/dev/docker` for this mod. CompassHud's resource-pack
+HTTP host is configured in the Minecraft server directory:
+
+```text
+/home/assisr/dev/minecraft/docker-compose.resourcepacks.yml
+/home/assisr/dev/minecraft/resourcepack-nginx/default.conf
+/home/assisr/dev/minecraft/config.env
+/home/assisr/dev/minecraft/start.sh
+/home/assisr/dev/minecraft/stop.sh
+```
+
+`start.sh` starts the resource-pack Docker container before Minecraft starts.
+`stop.sh` stops it after Minecraft stops. `restart.sh` uses those scripts, so it
+also handles the container lifecycle.
+
+Current resource-pack settings in `config.env`:
+
+```text
+RESOURCE_PACK_HOST_ENABLED="1"
+RESOURCE_PACK_BIND_IP="192.168.18.100"
+RESOURCE_PACK_PUBLIC_HOST="mine.assisr.com"
+RESOURCE_PACK_PORT="8000"
+RESOURCE_PACK_FILE="CompassHud-resource-pack-2.1.0.zip"
+RESOURCE_PACK_ID="4b06a502-d777-4a99-bc2e-6e06c6e4c58e"
+RESOURCE_PACK_COMPOSE_PROJECT="compasshud-resource-pack"
+```
+
+The container binds to the server's LAN IP only:
+
+```text
+192.168.18.100:8000 -> container:80
+```
+
+The URL advertised to Minecraft clients is public:
+
+```text
+http://mine.assisr.com:8000/CompassHud-resource-pack-2.1.0.zip
+```
+
+Remote players do not fetch this through the Minecraft protocol on port 25565.
+Their vanilla client downloads the URL directly. For off-LAN users to work,
+public TCP `8000` must be allowed through host firewall and router/NAT to:
+
+```text
+192.168.18.100:8000
+```
+
+Host firewall command:
+
+```bash
+sudo ufw allow 8000/tcp comment 'CompassHud resource pack'
+```
+
+External test, preferably from outside the LAN:
+
+```bash
+curl -I http://mine.assisr.com:8000/CompassHud-resource-pack-2.1.0.zip
+```
+
+### Resource-Pack HTTP Security
+
+Random users must never get broad file access to the Minecraft server. The
+resource-pack container is intentionally restricted:
+
+- It bind-mounts only the permitted zip file, not the whole server directory.
+- The zip is mounted read-only.
+- The Nginx config allows only the exact zip path.
+- `/`, `/server.properties`, `/config.env`, traversal attempts, and other paths
+  must return `404`.
+- The container uses a read-only root filesystem.
+- `no-new-privileges` is enabled.
+- Nginx runtime/cache paths are tmpfs mounts.
+
+Expected verification:
+
+```text
+/CompassHud-resource-pack-2.1.0.zip              200
+/                                                404
+/server.properties                               404
+/config.env                                      404
+/../server.properties                            404
+/CompassHud-resource-pack-2.1.0.zip/anything     404
+```
+
+Useful checks:
+
+```bash
+docker ps --filter name=compasshud-resource-pack
+docker inspect compasshud-resource-pack --format '{{json .NetworkSettings.Ports}}'
+curl -s -o /dev/null -w '%{http_code}\n' \
+  http://192.168.18.100:8000/CompassHud-resource-pack-2.1.0.zip
+```
+
 ## Runtime Config
 
 Live server config is in:

@@ -86,8 +86,8 @@ public final class CompassConfig {
         this.majorTick = firstChar(chars.majorTick, '|');
         this.hasPointer = chars.pointer != null && !chars.pointer.isEmpty();
         this.pointer = firstChar(chars.pointer, '^');
-        this.spawnMarker = firstChar(chars.spawnMarker, '*');
-        this.deathMarker = firstChar(chars.deathMarker, 'x');
+        this.spawnMarker = firstChar(chars.spawnMarker, '✦');
+        this.deathMarker = firstChar(chars.deathMarker, '✕');
         this.leftBracket = orEmpty(chars.leftBracket);
         this.rightBracket = orEmpty(chars.rightBracket);
 
@@ -152,7 +152,7 @@ public final class CompassConfig {
     /** Mutable view used only for (de)serialization; defaults live in the field initializers. */
     static final class Raw {
         String display = "BOSS_BAR";
-        int width = 81;
+        int width = 93;
         double fieldOfView = 180.0;
         int markInterval = 30;
         boolean showDegrees = true;
@@ -170,9 +170,9 @@ public final class CompassConfig {
             String filler = "\uE000";
             String minorTick = "\uE001";
             String majorTick = "\uE002";
-            String pointer = "\uE003";
-            String spawnMarker = "\uE004";
-            String deathMarker = "\uE005";
+            String pointer = "";
+            String spawnMarker = "✦";
+            String deathMarker = "✕";
             String leftBracket = "";
             String rightBracket = "";
         }
@@ -184,8 +184,8 @@ public final class CompassConfig {
             String intercardinal = "GRAY";
             String pointer = "GOLD";
             String bracket = "DARK_GRAY";
-            String spawn = "#8fa7ff";
-            String death = "#9b68ff";
+            String spawn = "#33CC33";
+            String death = "#AA0000";
         }
 
         static final class Markers {
@@ -320,12 +320,12 @@ public final class CompassConfig {
                 "markInterval: degrees between numeric marks (e.g. 30, 45, 50, 90). Marks on a cardinal show N/E/S/W.",
                 "showDegrees: show the degree numbers (false = letters-only compass).",
                 "showIntercardinals: show NE/SE/SW/NW (they replace numbers at those bearings).",
-                "updateIntervalTicks: refresh period in ticks (20 = 1s). 1 is smoothest; boss bar only sends a packet on change.",
+                "updateIntervalTicks: refresh period in server ticks (20 = 1s). 1 is the fastest server-side cadence; boss bar only sends a packet on change.",
                 "defaultEnabled: whether players see the compass on join (toggle per-session with /compass).",
                 "resourcePackMode: use CompassHud's custom-font glyphs. Requires clients to accept the CompassHud resource pack.",
                 "resourcePackFont: font id defined by the CompassHud resource pack.",
-                "characters.pointer: set to \\"\\" to disable the center glyph (the center is still highlighted).",
-                "characters filler/minorTick/majorTick/pointer/spawnMarker/deathMarker default to private-use glyphs from the resource pack.",
+                "characters.pointer: set to \\"\\" to disable the center glyph and highlight.",
+                "characters filler/minorTick/majorTick/pointer default to private-use glyphs from the resource pack; spawnMarker/deathMarker default to visible symbols.",
                 "markers.worldSpawn: show an icon pointing toward world spawn.",
                 "markers.lastDeath: show an icon pointing toward the player's last death location.",
                 "markers.sameDimensionOnly: hide markers from other dimensions.",
@@ -338,7 +338,7 @@ public final class CompassConfig {
               ],
 
               "display": "BOSS_BAR",
-              "width": 81,
+              "width": 93,
               "fieldOfView": 180,
               "markInterval": 30,
               "showDegrees": true,
@@ -352,9 +352,9 @@ public final class CompassConfig {
                 "filler": "\\uE000",
                 "minorTick": "\\uE001",
                 "majorTick": "\\uE002",
-                "pointer": "\\uE003",
-                "spawnMarker": "\\uE004",
-                "deathMarker": "\\uE005",
+                "pointer": "",
+                "spawnMarker": "✦",
+                "deathMarker": "✕",
                 "leftBracket": "",
                 "rightBracket": ""
               },
@@ -366,8 +366,8 @@ public final class CompassConfig {
                 "intercardinal": "GRAY",
                 "pointer": "GOLD",
                 "bracket": "DARK_GRAY",
-                "spawn": "#8fa7ff",
-                "death": "#9b68ff"
+                "spawn": "#33CC33",
+                "death": "#AA0000"
               },
 
               "markers": {
