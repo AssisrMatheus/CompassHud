@@ -3,7 +3,9 @@ package dev.assisr.compasshud;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import net.minecraft.ChatFormatting;
+import net.minecraft.network.chat.FontDescription;
 import net.minecraft.network.chat.TextColor;
+import net.minecraft.resources.Identifier;
 import net.minecraft.world.BossEvent;
 import org.slf4j.Logger;
 
@@ -38,9 +40,15 @@ public final class CompassConfig {
     public final double fieldOfView;
     public final int updateIntervalTicks;
     public final boolean defaultEnabled;
+    public final boolean resourcePackMode;
+    public final FontDescription.Resource resourcePackFont;
 
     public final char filler;
+    public final char minorTick;
+    public final char majorTick;
     public final char pointer;
+    public final char spawnMarker;
+    public final char deathMarker;
     public final boolean hasPointer;
     public final String leftBracket;
     public final String rightBracket;
@@ -48,6 +56,13 @@ public final class CompassConfig {
     public final TextColor fillerColor;
     public final TextColor pointerColor;
     public final TextColor bracketColor;
+    public final TextColor spawnColor;
+    public final TextColor deathColor;
+
+    public final boolean showWorldSpawn;
+    public final boolean showLastDeath;
+    public final boolean markerSameDimensionOnly;
+    public final boolean markerClampToEdge;
 
     public final BossEvent.BossBarColor bossBarColor;
     public final BossEvent.BossBarOverlay bossBarOverlay;
@@ -62,11 +77,17 @@ public final class CompassConfig {
         this.fieldOfView = clamp(raw.fieldOfView, 10.0, 360.0);
         this.updateIntervalTicks = Math.max(1, raw.updateIntervalTicks);
         this.defaultEnabled = raw.defaultEnabled;
+        this.resourcePackMode = raw.resourcePackMode;
+        this.resourcePackFont = new FontDescription.Resource(Identifier.parse(orDefault(raw.resourcePackFont, "compasshud:compass")));
 
         Raw.Chars chars = raw.characters != null ? raw.characters : new Raw.Chars();
         this.filler = firstChar(chars.filler, '-');
+        this.minorTick = firstChar(chars.minorTick, '|');
+        this.majorTick = firstChar(chars.majorTick, '|');
         this.hasPointer = chars.pointer != null && !chars.pointer.isEmpty();
         this.pointer = firstChar(chars.pointer, '^');
+        this.spawnMarker = firstChar(chars.spawnMarker, '✦');
+        this.deathMarker = firstChar(chars.deathMarker, '✕');
         this.leftBracket = orEmpty(chars.leftBracket);
         this.rightBracket = orEmpty(chars.rightBracket);
 
@@ -77,6 +98,14 @@ public final class CompassConfig {
         TextColor interColor = color(colors.intercardinal, tc(ChatFormatting.GRAY), log);
         this.pointerColor = color(colors.pointer, tc(ChatFormatting.GOLD), log);
         this.bracketColor = color(colors.bracket, tc(ChatFormatting.DARK_GRAY), log);
+        this.spawnColor = color(colors.spawn, tc(ChatFormatting.BLUE), log);
+        this.deathColor = color(colors.death, tc(ChatFormatting.DARK_PURPLE), log);
+
+        Raw.Markers markers = raw.markers != null ? raw.markers : new Raw.Markers();
+        this.showWorldSpawn = markers.worldSpawn;
+        this.showLastDeath = markers.lastDeath;
+        this.markerSameDimensionOnly = markers.sameDimensionOnly;
+        this.markerClampToEdge = markers.clampToEdge;
 
         Raw.Boss boss = raw.bossbar != null ? raw.bossbar : new Raw.Boss();
         this.bossBarColor = enumOf(BossEvent.BossBarColor.class, boss.color, BossEvent.BossBarColor.WHITE, log, "bossbar.color");
@@ -123,31 +152,47 @@ public final class CompassConfig {
     /** Mutable view used only for (de)serialization; defaults live in the field initializers. */
     static final class Raw {
         String display = "BOSS_BAR";
-        int width = 33;
+        int width = 93;
         double fieldOfView = 180.0;
         int markInterval = 30;
         boolean showDegrees = true;
         boolean showIntercardinals = false;
         int updateIntervalTicks = 1;
         boolean defaultEnabled = true;
+        boolean resourcePackMode = true;
+        String resourcePackFont = "compasshud:compass";
         Chars characters = new Chars();
         Colors colors = new Colors();
+        Markers markers = new Markers();
         Boss bossbar = new Boss();
 
         static final class Chars {
-            String filler = "-";
-            String pointer = "^";
-            String leftBracket = "[";
-            String rightBracket = "]";
+            String filler = "\uE000";
+            String minorTick = "\uE001";
+            String majorTick = "\uE002";
+            String pointer = "";
+            String spawnMarker = "✦";
+            String deathMarker = "✕";
+            String leftBracket = "";
+            String rightBracket = "";
         }
 
         static final class Colors {
-            String filler = "DARK_GRAY";
+            String filler = "#c9d7ff";
             String number = "WHITE";
             String cardinal = "AQUA";
             String intercardinal = "GRAY";
             String pointer = "GOLD";
             String bracket = "DARK_GRAY";
+            String spawn = "#33CC33";
+            String death = "#AA0000";
+        }
+
+        static final class Markers {
+            boolean worldSpawn = true;
+            boolean lastDeath = true;
+            boolean sameDimensionOnly = true;
+            boolean clampToEdge = true;
         }
 
         static final class Boss {
@@ -195,6 +240,10 @@ public final class CompassConfig {
 
     private static String orEmpty(String s) {
         return s == null ? "" : s;
+    }
+
+    private static String orDefault(String s, String fallback) {
+        return (s == null || s.isBlank()) ? fallback : s;
     }
 
     private static TextColor tc(ChatFormatting f) {
@@ -271,38 +320,61 @@ public final class CompassConfig {
                 "markInterval: degrees between numeric marks (e.g. 30, 45, 50, 90). Marks on a cardinal show N/E/S/W.",
                 "showDegrees: show the degree numbers (false = letters-only compass).",
                 "showIntercardinals: show NE/SE/SW/NW (they replace numbers at those bearings).",
-                "updateIntervalTicks: refresh period in ticks (20 = 1s). 1 is smoothest; boss bar only sends a packet on change.",
+                "updateIntervalTicks: refresh period in server ticks (20 = 1s). 1 is the fastest server-side cadence; boss bar only sends a packet on change.",
                 "defaultEnabled: whether players see the compass on join (toggle per-session with /compass).",
-                "characters.pointer: set to \\"\\" to disable the center glyph (the center is still highlighted).",
+                "resourcePackMode: use CompassHud's custom-font glyphs. Requires clients to accept the CompassHud resource pack.",
+                "resourcePackFont: font id defined by the CompassHud resource pack.",
+                "characters.pointer: set to \\"\\" to disable the center glyph and highlight.",
+                "characters filler/minorTick/majorTick/pointer default to private-use glyphs from the resource pack; spawnMarker/deathMarker default to visible symbols.",
+                "markers.worldSpawn: show an icon pointing toward world spawn.",
+                "markers.lastDeath: show an icon pointing toward the player's last death location.",
+                "markers.sameDimensionOnly: hide markers from other dimensions.",
+                "markers.clampToEdge: keep off-screen markers pinned to the compass edge.",
                 "colors: a Minecraft color name (WHITE, AQUA, GOLD, DARK_GRAY, ...) or a hex string like \\"#55ffff\\".",
                 "bossbar.color: PINK, BLUE, RED, GREEN, YELLOW, PURPLE, WHITE.",
+                "The provided resource pack hides WHITE boss-bar textures; use WHITE for the CompassHud boss bar.",
                 "bossbar.overlay: PROGRESS, NOTCHED_6, NOTCHED_10, NOTCHED_12, NOTCHED_20.",
                 "bossbar.progress: 0.0 - 1.0 length of the filled bar (purely cosmetic)."
               ],
 
               "display": "BOSS_BAR",
-              "width": 33,
+              "width": 93,
               "fieldOfView": 180,
               "markInterval": 30,
               "showDegrees": true,
               "showIntercardinals": false,
               "updateIntervalTicks": 1,
               "defaultEnabled": true,
+              "resourcePackMode": true,
+              "resourcePackFont": "compasshud:compass",
 
               "characters": {
-                "filler": "-",
-                "pointer": "^",
-                "leftBracket": "[",
-                "rightBracket": "]"
+                "filler": "\\uE000",
+                "minorTick": "\\uE001",
+                "majorTick": "\\uE002",
+                "pointer": "",
+                "spawnMarker": "✦",
+                "deathMarker": "✕",
+                "leftBracket": "",
+                "rightBracket": ""
               },
 
               "colors": {
-                "filler": "DARK_GRAY",
+                "filler": "#c9d7ff",
                 "number": "WHITE",
                 "cardinal": "AQUA",
                 "intercardinal": "GRAY",
                 "pointer": "GOLD",
-                "bracket": "DARK_GRAY"
+                "bracket": "DARK_GRAY",
+                "spawn": "#33CC33",
+                "death": "#AA0000"
+              },
+
+              "markers": {
+                "worldSpawn": true,
+                "lastDeath": true,
+                "sameDimensionOnly": true,
+                "clampToEdge": true
               },
 
               "bossbar": {
