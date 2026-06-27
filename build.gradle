@@ -1,0 +1,47 @@
+plugins {
+    id 'java'
+}
+
+version = project.mod_version
+group = project.maven_group
+
+base {
+    archivesName = project.archives_base_name
+}
+
+repositories {
+    maven {
+        name = 'Fabric'
+        url = 'https://maven.fabricmc.net/'
+    }
+    mavenCentral()
+}
+
+dependencies {
+    compileOnly files("../versions/${project.minecraft_version}/server-${project.minecraft_version}.jar")
+    compileOnly fileTree(dir: '../libraries', include: '**/*.jar')
+    compileOnly "net.fabricmc:fabric-loader:${project.loader_version}"
+    compileOnly fileTree(dir: '../.fabric/processedMods', include: '*.jar')
+}
+
+processResources {
+    inputs.property "version", project.version
+    filesMatching("fabric.mod.json") {
+        expand "version": project.version
+    }
+}
+
+tasks.withType(JavaCompile).configureEach {
+    // MC 26.2 runs on Java 25.
+    it.options.encoding = 'UTF-8'
+    it.options.release = 25
+}
+
+java {
+    withSourcesJar()
+    sourceCompatibility = JavaVersion.VERSION_25
+    targetCompatibility = JavaVersion.VERSION_25
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(25)
+    }
+}
